@@ -1,0 +1,7 @@
+{
+  "name": "TRU - Job Tracker for Tradies",
+  "description": "A professional, minimal, and mobile-first job tracking tool for tradespeople. Track jobs, expenses, and profitability with Apple-level GUI standards.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
