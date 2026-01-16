@@ -4,6 +4,8 @@ import { Job, JobStatus, ExpenseType, Expense } from './types';
 import { Icons } from './constants';
 import { JobCard } from './components/JobCard';
 import { ProgressBar } from './components/ProgressBar';
+import { takePhoto } from './utils/camera';
+import { shareJob } from './utils/share';
 
 type Tab = 'jobs' | 'history';
 
@@ -44,6 +46,9 @@ const App: React.FC = () => {
   const [isAddingJob, setIsAddingJob] = useState(false);
   const [isAddingExpense, setIsAddingExpense] = useState(false);
   const [isEditingJob, setIsEditingJob] = useState(false);
+  const [expensePhoto, setExpensePhoto] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'over' | 'due'>('all');
 
   useEffect(() => {
     localStorage.setItem('aaa_jobs', JSON.stringify(jobs));
@@ -53,15 +58,61 @@ const App: React.FC = () => {
   const historyJobs = useMemo(() => jobs.filter(j => j.status === JobStatus.COMPLETED), [jobs]);
   const selectedJob = useMemo(() => jobs.find(j => j.id === selectedJobId), [jobs, selectedJobId]);
 
+  const currentJobsList = currentTab === 'jobs' ? activeJobs : historyJobs;
+
+  const filterJobs = (jobList: Job[]) => {
+    let filtered = jobList;
+
+    // Apply search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(j =>
+        j.title.toLowerCase().includes(query) ||
+        j.customerName.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply filter type
+    if (filterType === 'over') {
+      filtered = filtered.filter(j => {
+        const spent = j.expenses.reduce((sum, e) => sum + e.amount, 0);
+        return spent > j.estimatedPrice;
+      });
+    } else if (filterType === 'due') {
+      const threeDaysFromNow = new Date();
+      threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
+      filtered = filtered.filter(j => new Date(j.dueDate) <= threeDaysFromNow);
+    }
+
+    return filtered;
+  };
+
+  const filteredJobs = useMemo(() => filterJobs(currentJobsList), [currentJobsList, searchQuery, filterType]);
+
   const addJob = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const title = formData.get('title') as string;
-    const customer = formData.get('customer') as string;
+    const title = (formData.get('title') as string)?.trim();
+    const customer = (formData.get('customer') as string)?.trim();
     const estimate = Number(formData.get('estimate'));
     const dueDate = formData.get('dueDate') as string;
-    
-    if(!title || !customer || isNaN(estimate)) return;
+
+    if(!title || title.length < 2) {
+      alert('Please enter a valid job title (at least 2 characters)');
+      return;
+    }
+    if(!customer || customer.length < 2) {
+      alert('Please enter a valid customer name (at least 2 characters)');
+      return;
+    }
+    if(isNaN(estimate) || estimate <= 0) {
+      alert('Please enter a valid budget amount greater than 0');
+      return;
+    }
+    if(!dueDate) {
+      alert('Please select a due date');
+      return;
+    }
 
     const newJob: Job = {
       id: Math.random().toString(36).substr(2, 9),
@@ -107,24 +158,51 @@ const App: React.FC = () => {
     }
   };
 
+  const handleTakePhoto = async () => {
+    const photo = await takePhoto();
+    if (photo) {
+      setExpensePhoto(photo);
+    }
+  };
+
   const addExpense = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedJobId) return;
     const formData = new FormData(e.currentTarget);
-    const desc = formData.get('description') as string;
+    const desc = (formData.get('description') as string)?.trim();
     const amt = Number(formData.get('amount'));
-    
-    if(!desc || isNaN(amt)) return;
+
+    if(!desc || desc.length < 2) {
+      alert('Please enter a valid description (at least 2 characters)');
+      return;
+    }
+    if(isNaN(amt) || amt <= 0) {
+      alert('Please enter a valid amount greater than 0');
+      return;
+    }
 
     const newExpense: Expense = {
       id: Math.random().toString(36).substr(2, 9),
       type: formData.get('type') as ExpenseType,
       description: desc,
       amount: amt,
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      photo: expensePhoto || undefined
     };
     setJobs(prevJobs => prevJobs.map(j => j.id === selectedJobId ? { ...j, expenses: [newExpense, ...j.expenses] } : j));
     setIsAddingExpense(false);
+    setExpensePhoto(null);
+  };
+
+  const deleteExpense = (expenseId: string) => {
+    if (!selectedJobId) return;
+    if (window.confirm('Delete this expense?')) {
+      setJobs(prevJobs => prevJobs.map(j =>
+        j.id === selectedJobId
+          ? { ...j, expenses: j.expenses.filter(e => e.id !== expenseId) }
+          : j
+      ));
+    }
   };
 
   if (selectedJobId && selectedJob) {
@@ -137,15 +215,25 @@ const App: React.FC = () => {
           <button onClick={() => setSelectedJobId(null)} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-blue-400 border border-white/10">
             <Icons.ArrowLeft />
           </button>
-          <div className="text-center px-4 overflow-hidden">
+          <div className="text-center px-4 overflow-hidden flex-1">
             <h2 className="text-xs font-bold tracking-tight text-white/90 truncate">{selectedJob.title}</h2>
             <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest truncate">{selectedJob.customerName}</div>
           </div>
-          <button onClick={() => setIsEditingJob(true)} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 border border-white/10">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 5V5.01M12 12V12.01M12 19V19.01M12 6C12.5523 6 13 5.55228 13 5C13 4.44772 12.5523 4 12 4C11.4477 4 11 4.44772 11 5C11 5.55228 11.4477 6 12 6ZM12 13C12.5523 13 13 12.5523 13 12C13 11.4477 12.5523 11 12 11C11.4477 11 11 11.4477 11 12C11 12.5523 11.4477 13 12 13ZM12 20C12.5523 20 13 19.5523 13 19C13 18.4477 12.5523 18 12 18C11.4477 18 11 18.4477 11 19C11 19.5523 11.4477 20 12 20Z" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => shareJob(selectedJob)}
+              className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-blue-400 border border-white/10 hover:bg-blue-500/10 transition-colors"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 12L12 16M12 16L16 12M12 16V3M19 16V20C19 21.1046 18.1046 22 17 22H7C5.89543 22 5 21.1046 5 20V16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+              </svg>
+            </button>
+            <button onClick={() => setIsEditingJob(true)} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 border border-white/10">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 5V5.01M12 12V12.01M12 19V19.01M12 6C12.5523 6 13 5.55228 13 5C13 4.44772 12.5523 4 12 4C11.4477 4 11 4.44772 11 5C11 5.55228 11.4477 6 12 6ZM12 13C12.5523 13 13 12.5523 13 12C13 11.4477 12.5523 11 12 11C11.4477 11 11 11.4477 11 12C11 12.5523 11.4477 13 12 13ZM12 20C12.5523 20 13 19.5523 13 19C13 18.4477 12.5523 18 12 18C11.4477 18 11 18.4477 11 19C11 19.5523 11.4477 20 12 20Z" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
         </header>
 
         <main className="p-6 space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -173,12 +261,34 @@ const App: React.FC = () => {
                 </div>
               )}
               {selectedJob.expenses.map(exp => (
-                <div key={exp.id} className="liquid-glass p-5 flex justify-between items-center group border-white/5">
-                  <div className="space-y-0.5">
-                    <p className="font-bold text-white text-sm tracking-tight">{exp.description}</p>
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">{exp.type}</span>
+                <div key={exp.id} className="liquid-glass p-5 group border-white/5">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1 space-y-0.5">
+                      <p className="font-bold text-white text-sm tracking-tight">{exp.description}</p>
+                      <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">{exp.type}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="font-black text-white tabular-nums">£{exp.amount.toLocaleString()}</p>
+                      {!isCompleted && (
+                        <button
+                          onClick={() => deleteExpense(exp.id)}
+                          className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400 border border-red-500/20 opacity-0 group-hover:opacity-100 transition-opacity active:scale-95"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <p className="font-black text-white tabular-nums">£{exp.amount.toLocaleString()}</p>
+                  {exp.photo && (
+                    <img
+                      src={exp.photo}
+                      alt="Receipt"
+                      className="w-full h-32 object-cover rounded-xl border border-white/10 mt-3 cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => window.open(exp.photo, '_blank')}
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -258,6 +368,37 @@ const App: React.FC = () => {
                     </select>
                   </div>
                 </div>
+
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-1">Receipt/Photo (Optional)</label>
+                  <button
+                    type="button"
+                    onClick={handleTakePhoto}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-center gap-2 text-slate-400 hover:text-blue-400 hover:border-blue-500/30 transition-all"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect x="3" y="6" width="18" height="13" rx="2" stroke="currentColor" strokeWidth="2"/>
+                      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+                      <path d="M9 6L10 3h4l1 3" stroke="currentColor" strokeWidth="2"/>
+                    </svg>
+                    <span className="text-xs font-bold">{expensePhoto ? 'Photo Added ✓' : 'Add Photo'}</span>
+                  </button>
+                  {expensePhoto && (
+                    <div className="relative">
+                      <img src={expensePhoto} alt="Receipt preview" className="w-full h-32 object-cover rounded-xl border border-white/10" />
+                      <button
+                        type="button"
+                        onClick={() => setExpensePhoto(null)}
+                        className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center text-white"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <button type="submit" className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 transition-all uppercase tracking-widest text-[9px] mt-2">
                   Commit Entry
                 </button>
@@ -269,65 +410,123 @@ const App: React.FC = () => {
     );
   }
 
-  const currentJobsList = currentTab === 'jobs' ? activeJobs : historyJobs;
-
   return (
     <div className="min-h-screen pb-40">
-      <header className="px-8 pt-12 pb-6 flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center">
-              <span className="text-[10px] font-black text-white italic">T</span>
-            </div>
-            <h1 className="text-[14px] font-black text-white tracking-[0.3em] uppercase italic">TRU</h1>
+      <header className="px-6 pt-10 pb-4">
+        <div className="flex items-center gap-2.5 mb-2">
+          <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <span className="text-xs font-black text-white">T</span>
           </div>
-          <h2 className="text-2xl font-black text-white tracking-tighter">
-            {currentTab === 'jobs' ? 'Live Track' : 'Archive'}
-          </h2>
-          <p className="text-slate-500 text-[10px] font-bold tracking-tight">
-            {currentTab === 'jobs' ? `${activeJobs.length} active sites` : `${historyJobs.length} completed`}
-          </p>
+          <h1 className="text-sm font-black text-white tracking-[0.25em] uppercase">TRU</h1>
         </div>
-        <div className="w-10 h-10 rounded-xl bg-blue-600/10 flex items-center justify-center text-blue-500 border border-blue-500/10"><Icons.Briefcase /></div>
+        <h2 className="text-3xl font-black text-white tracking-tight mb-1">
+          {currentTab === 'jobs' ? 'Live Jobs' : 'Completed'}
+        </h2>
+        <p className="text-slate-400 text-sm font-semibold">
+          {filteredJobs.length} {filteredJobs.length === 1 ? 'job' : 'jobs'}
+        </p>
       </header>
 
-      <main className="px-6 py-4 space-y-4">
-        {currentJobsList.length === 0 && (
-          <div className="py-20 text-center">
-            <p className="text-slate-600 text-[10px] font-black uppercase tracking-[0.3em]">{currentTab === 'jobs' ? 'No active projects' : 'Vault is empty'}</p>
+      <div className="px-6 pb-4 space-y-3">
+        {/* Search Bar */}
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search jobs or customers..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-sm font-semibold text-white placeholder-slate-500 outline-none focus:border-blue-500/50 transition-colors"
+          />
+          <svg className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
+            <path d="M21 21L16.65 16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Filter Chips */}
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <button
+            onClick={() => setFilterType('all')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex-shrink-0 ${
+              filterType === 'all'
+                ? 'bg-blue-500 text-white'
+                : 'bg-white/5 text-slate-400 border border-white/10'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setFilterType('over')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex-shrink-0 ${
+              filterType === 'over'
+                ? 'bg-red-500 text-white'
+                : 'bg-white/5 text-slate-400 border border-white/10'
+            }`}
+          >
+            Over Budget
+          </button>
+          <button
+            onClick={() => setFilterType('due')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex-shrink-0 ${
+              filterType === 'due'
+                ? 'bg-orange-500 text-white'
+                : 'bg-white/5 text-slate-400 border border-white/10'
+            }`}
+          >
+            Due Soon
+          </button>
+        </div>
+      </div>
+
+      <main className="px-6 py-2 space-y-3">
+        {filteredJobs.length === 0 && (
+          <div className="py-24 text-center">
+            <p className="text-slate-600 text-xs font-bold uppercase tracking-wider">
+              {searchQuery || filterType !== 'all' ? 'No jobs match your filters' : currentTab === 'jobs' ? 'No active projects' : 'Vault is empty'}
+            </p>
           </div>
         )}
-        {currentJobsList.map(job => (
-          <JobCard 
+        {filteredJobs.map(job => (
+          <JobCard
             key={job.id}
-            job={job} 
-            onClick={() => setSelectedJobId(job.id)} 
+            job={job}
+            onClick={() => setSelectedJobId(job.id)}
           />
         ))}
       </main>
 
-      <nav className="fixed bottom-6 left-6 right-6 h-24 liquid-glass z-50 flex items-center justify-around px-8 shadow-2xl border-white/10">
-        <button 
+      <nav className="fixed bottom-6 left-6 right-6 h-20 liquid-glass z-50 flex items-center justify-around px-6 shadow-2xl border-white/10">
+        <button
           onClick={() => setCurrentTab('jobs')}
-          className={`flex flex-col items-center gap-2 transition-all ${currentTab === 'jobs' ? 'text-blue-500 scale-105' : 'text-slate-500'}`}
+          className={`flex flex-col items-center gap-1.5 transition-all duration-200 ${currentTab === 'jobs' ? 'text-blue-400 scale-105' : 'text-slate-500'}`}
         >
           <Icons.Briefcase />
-          <span className="text-[10px] font-black uppercase tracking-widest">Live</span>
+          <span className="text-[9px] font-extrabold uppercase tracking-wider">Live</span>
         </button>
 
-        <button 
+        <button
           onClick={() => setIsAddingJob(true)}
-          className="w-14 h-14 bg-white/10 hover:bg-white/20 text-white rounded-[20px] flex items-center justify-center border border-white/10 active:scale-90 transition-all shadow-xl"
+          className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-2xl flex items-center justify-center active:scale-95 transition-all shadow-lg shadow-blue-500/30"
         >
           <Icons.Plus />
         </button>
 
-        <button 
+        <button
           onClick={() => setCurrentTab('history')}
-          className={`flex flex-col items-center gap-2 transition-all ${currentTab === 'history' ? 'text-blue-500 scale-105' : 'text-slate-500'}`}
+          className={`flex flex-col items-center gap-1.5 transition-all duration-200 ${currentTab === 'history' ? 'text-blue-400 scale-105' : 'text-slate-500'}`}
         >
           <Icons.Clock />
-          <span className="text-[10px] font-black uppercase tracking-widest">Vault</span>
+          <span className="text-[9px] font-extrabold uppercase tracking-wider">Vault</span>
         </button>
       </nav>
 

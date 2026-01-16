@@ -1,0 +1,76 @@
+@import 'tailwindcss';
+
+:root {
+    --bg-deep: #0D0F12;
+    --accent-blue: #3B82F6;
+    --glass-base: rgba(26, 31, 38, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-highlight: rgba(255, 255, 255, 0.1);
+}
+
+body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: #0D0F12;
+    background-image: radial-gradient(circle at 50% 0%, #1a2333 0%, #0D0F12 80%);
+    color: #FFFFFF;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: contain;
+    letter-spacing: -0.01em;
+}
+
+.liquid-glass {
+    background: var(--glass-base);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    border-top: 1px solid var(--glass-highlight);
+    box-shadow:
+        0 20px 40px -10px rgba(0, 0, 0, 0.6),
+        0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+        0 2px 4px rgba(59, 130, 246, 0.05);
+    border-radius: 24px;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.text-premium-gold {
+    background: linear-gradient(180deg, #FFFFFF 0%, #CBD5E1 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.progress-liquid {
+    position: relative;
+    background: linear-gradient(90deg, #2563EB 0%, #60A5FA 100%);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+    overflow: hidden;
+    border-radius: 999px;
+}
+
+.shimmer-premium {
+    position: relative;
+    overflow: hidden;
+}
+
+.shimmer-premium::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -150%;
+    width: 40%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.02), transparent);
+    transform: skewX(-20deg);
+    animation: premium-shimmer 8s infinite ease-in-out;
+}
+
+@keyframes premium-shimmer {
+    0% { left: -150%; }
+    30% { left: 150%; }
+    100% { left: 150%; }
+}
+
+.safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+* {
+    -webkit-font-smoothing: antialiased;
+}

@@ -11,48 +11,60 @@ interface JobCardProps {
 
 export const JobCard: React.FC<JobCardProps> = ({ job, onClick }) => {
   const totalExpenses = job.expenses.reduce((sum, exp) => sum + exp.amount, 0);
-  
+  const percentage = Math.min((totalExpenses / job.estimatedPrice) * 100, 100);
+  const isOver = totalExpenses > job.estimatedPrice;
+
   return (
-    <button 
+    <button
       onClick={onClick}
-      className="w-full text-left liquid-glass p-8 mb-6 outline-none block group shimmer-premium relative overflow-hidden"
+      className="w-full text-left liquid-glass p-5 mb-3 outline-none block group shimmer-premium relative overflow-hidden hover:scale-[1.01] active:scale-[0.99] transition-all duration-200"
     >
-      <div className="flex justify-between items-start mb-8">
-        <div className="space-y-2">
-          <h3 className="text-2xl font-black text-white tracking-tighter group-active:text-blue-400 transition-colors">
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex-1">
+          <h3 className="text-lg font-black text-white tracking-tight group-active:text-blue-400 transition-colors mb-1">
             {job.title}
           </h3>
-          <div className="flex items-center gap-3">
-            <span className="text-[9px] font-black bg-white/5 text-slate-500 px-2.5 py-1.5 rounded-lg uppercase tracking-widest border border-white/5">
-              Principal
-            </span>
-            <span className="text-sm font-bold text-slate-400 tracking-tight">{job.customerName}</span>
-          </div>
+          <p className="text-sm font-semibold text-slate-500">{job.customerName}</p>
         </div>
-        <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-slate-500 group-hover:text-blue-400 transition-all border border-white/5 shadow-lg group-hover:bg-white/10">
+        <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 group-hover:text-blue-400 transition-all border border-white/5 group-hover:bg-white/10 group-hover:border-blue-500/30 ml-3 flex-shrink-0">
           <Icons.ChevronRight />
         </div>
       </div>
-      
-      <div className="bg-black/30 rounded-[24px] p-6 mb-8 border border-white/5 shadow-inner backdrop-blur-md">
-        <ProgressBar current={totalExpenses} total={job.estimatedPrice} />
+
+      <div className="flex items-center justify-between text-xs mb-2">
+        <span className="text-slate-500 font-semibold">
+          £{totalExpenses.toLocaleString()} / £{job.estimatedPrice.toLocaleString()}
+        </span>
+        <span className={`font-bold ${isOver ? 'text-red-400' : 'text-emerald-400'}`}>
+          {percentage.toFixed(0)}%
+        </span>
       </div>
-      
-      <div className="flex items-center justify-between">
-        <div className="flex items-center text-[10px] text-slate-500 font-black uppercase tracking-[0.2em]">
-          <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center mr-3 text-slate-500">
-            <Icons.Clock />
-          </div>
-          Timeline &bull; {new Date(job.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+
+      <div className="h-2 w-full bg-black/60 rounded-full overflow-hidden border border-white/10 relative">
+        <div
+          className="h-full transition-all duration-500 rounded-full"
+          style={{
+            width: `${percentage}%`,
+            background: isOver
+              ? 'linear-gradient(90deg, #EF4444 0%, #DC2626 100%)'
+              : 'linear-gradient(90deg, #3B82F6 0%, #2563EB 100%)',
+          }}
+        />
+      </div>
+
+      <div className="flex items-center justify-between mt-3">
+        <div className="flex items-center text-xs text-slate-500 font-semibold">
+          <Icons.Clock />
+          <span className="ml-1.5">Due {new Date(job.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
         </div>
-        
-        {totalExpenses > job.estimatedPrice && (
-          <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-500/10 border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
-            <span className="relative flex h-2 w-2">
+
+        {isOver && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/10 border border-red-500/20">
+            <span className="relative flex h-1.5 w-1.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
             </span>
-            <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">At Risk</span>
+            <span className="text-[9px] font-black text-red-400 uppercase tracking-wider">Over</span>
           </div>
         )}
       </div>

@@ -17,6 +17,7 @@ export interface Expense {
   description: string;
   amount: number;
   date: string;
+  photo?: string; // base64 encoded photo
 }
 
 export interface Job {
