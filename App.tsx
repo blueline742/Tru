@@ -6,6 +6,8 @@ import { JobCard } from './components/JobCard';
 import { ProgressBar } from './components/ProgressBar';
 import { takePhoto } from './utils/camera';
 import { shareJob } from './utils/share';
+import { scanReceipt } from './utils/receiptScanner';
+import { downloadJobPDF } from './utils/pdfExport';
 
 type Tab = 'jobs' | 'history';
 
@@ -49,6 +51,7 @@ const App: React.FC = () => {
   const [expensePhoto, setExpensePhoto] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'over' | 'due'>('all');
+  const [isScanningReceipt, setIsScanningReceipt] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('aaa_jobs', JSON.stringify(jobs));
@@ -165,6 +168,49 @@ const App: React.FC = () => {
     }
   };
 
+  const handleScanReceipt = async () => {
+    if (!selectedJobId) return;
+
+    setIsScanningReceipt(true);
+    const photo = await takePhoto();
+
+    if (!photo) {
+      setIsScanningReceipt(false);
+      return;
+    }
+
+    const result = await scanReceipt(photo);
+    setIsScanningReceipt(false);
+
+    if (result.error) {
+      alert(`Receipt scan failed: ${result.error}`);
+      return;
+    }
+
+    if (result.items.length === 0) {
+      alert('No items found on receipt. Please try again or add manually.');
+      return;
+    }
+
+    // Add all items from receipt as expenses
+    const newExpenses: Expense[] = result.items.map(item => ({
+      id: Math.random().toString(36).substr(2, 9),
+      type: ExpenseType.MATERIAL,
+      description: item.description,
+      amount: item.amount,
+      date: new Date().toISOString(),
+      photo: photo
+    }));
+
+    setJobs(prevJobs => prevJobs.map(j =>
+      j.id === selectedJobId
+        ? { ...j, expenses: [...newExpenses, ...j.expenses] }
+        : j
+    ));
+
+    alert(`Successfully added ${newExpenses.length} items from receipt!`);
+  };
+
   const addExpense = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedJobId) return;
@@ -223,12 +269,23 @@ const App: React.FC = () => {
             <button
               onClick={() => shareJob(selectedJob)}
               className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-blue-400 border border-white/10 hover:bg-blue-500/10 transition-colors"
+              title="Share job summary"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 12L12 16M12 16L16 12M12 16V3M19 16V20C19 21.1046 18.1046 22 17 22H7C5.89543 22 5 21.1046 5 20V16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                <path d="M8.59 13.51l6.83 3.98m-.01-10.98l-6.82 3.98M21 5a3 3 0 11-6 0 3 3 0 016 0zM9 12a3 3 0 11-6 0 3 3 0 016 0zm12 7a3 3 0 11-6 0 3 3 0 016 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
-            <button onClick={() => setIsEditingJob(true)} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 border border-white/10">
+            <button
+              onClick={() => downloadJobPDF(selectedJob)}
+              className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-emerald-400 border border-white/10 hover:bg-emerald-500/10 transition-colors"
+              title="Download PDF"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M7 18a4.6 4.4 0 0 1 0 -9a5 4.5 0 0 1 11 2h1a3.5 3.5 0 0 1 0 7h-1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M9 15l3 3l3 -3M12 18v-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            <button onClick={() => setIsEditingJob(true)} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 border border-white/10 hover:bg-white/10 transition-colors" title="Edit job">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 5V5.01M12 12V12.01M12 19V19.01M12 6C12.5523 6 13 5.55228 13 5C13 4.44772 12.5523 4 12 4C11.4477 4 11 4.44772 11 5C11 5.55228 11.4477 6 12 6ZM12 13C12.5523 13 13 12.5523 13 12C13 11.4477 12.5523 11 12 11C11.4477 11 11 11.4477 11 12C11 12.5523 11.4477 13 12 13ZM12 20C12.5523 20 13 19.5523 13 19C13 18.4477 12.5523 18 12 18C11.4477 18 11 18.4477 11 19C11 19.5523 11.4477 20 12 20Z" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
@@ -242,15 +299,41 @@ const App: React.FC = () => {
           </div>
 
           <section>
-            <div className="flex justify-between items-center mb-4 px-1">
-              <h3 className="text-lg font-black text-white italic">Transactions</h3>
+            <div className="mb-4 px-1">
+              <h3 className="text-lg font-black text-white italic mb-3">Transactions</h3>
               {!isCompleted && (
-                <button 
-                  onClick={() => setIsAddingExpense(true)}
-                  className="bg-blue-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg"
-                >
-                  <Icons.Plus /> New Entry
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleScanReceipt}
+                    disabled={isScanningReceipt}
+                    className="flex-1 px-3 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg shadow-purple-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isScanningReceipt ? (
+                      <>
+                        <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Scanning...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="2" fill="none"/>
+                          <path d="M2 10h20M7 5L8.5 2h7L18 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                          <circle cx="12" cy="13" r="2.5" stroke="currentColor" strokeWidth="2" fill="none"/>
+                        </svg>
+                        <span>AI Scan</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setIsAddingExpense(true)}
+                    className="flex-1 bg-blue-600 px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"
+                  >
+                    <Icons.Plus /> <span>Manual</span>
+                  </button>
+                </div>
               )}
             </div>
 
@@ -296,7 +379,7 @@ const App: React.FC = () => {
         </main>
 
         {isEditingJob && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[2000] flex items-end sm:items-center justify-center p-6">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[2000] flex items-center justify-center p-6">
             <div className="w-full max-w-md liquid-glass rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom-8 duration-300">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-black tracking-tight italic">Manage Project</h2>
@@ -343,7 +426,7 @@ const App: React.FC = () => {
         )}
 
         {isAddingExpense && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[2000] flex items-end sm:items-center justify-center p-6">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[2000] flex items-center justify-center p-6">
             <div className="w-full max-w-md liquid-glass rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom-8 duration-300">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-black tracking-tight italic">New Transaction</h2>
@@ -412,12 +495,14 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen pb-40">
-      <header className="px-6 pt-10 pb-4">
-        <div className="flex items-center gap-2.5 mb-2">
-          <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <span className="text-xs font-black text-white">T</span>
-          </div>
-          <h1 className="text-sm font-black text-white tracking-[0.25em] uppercase">TRU</h1>
+      <header className="px-6 pt-8 pb-6 text-center">
+        <div className="flex flex-col items-center mb-6">
+          <img
+            src="/icon.png"
+            alt="TRU Logo"
+            className="w-16 h-16 rounded-2xl shadow-xl mb-3"
+          />
+          <h1 className="text-lg font-black text-white tracking-[0.3em] uppercase opacity-90">TRU</h1>
         </div>
         <h2 className="text-3xl font-black text-white tracking-tight mb-1">
           {currentTab === 'jobs' ? 'Live Jobs' : 'Completed'}
@@ -531,7 +616,7 @@ const App: React.FC = () => {
       </nav>
 
       {isAddingJob && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[2000] flex items-end sm:items-center justify-center p-6">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[2000] flex items-center justify-center p-6">
           <div className="w-full max-w-md liquid-glass rounded-[32px] p-8 shadow-2xl animate-in slide-in-from-bottom-8 duration-300">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-black tracking-tight italic">Initialize Job</h2>

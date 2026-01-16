@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Job } from '../types';
+import { Job, JobStatus } from '../types';
 import { Icons } from '../constants';
 import { ProgressBar } from './ProgressBar';
 
@@ -13,6 +13,8 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onClick }) => {
   const totalExpenses = job.expenses.reduce((sum, exp) => sum + exp.amount, 0);
   const percentage = Math.min((totalExpenses / job.estimatedPrice) * 100, 100);
   const isOver = totalExpenses > job.estimatedPrice;
+  const isCompleted = job.status === JobStatus.COMPLETED;
+  const budgetDifference = job.estimatedPrice - totalExpenses;
 
   return (
     <button
@@ -53,19 +55,44 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onClick }) => {
       </div>
 
       <div className="flex items-center justify-between mt-3">
-        <div className="flex items-center text-xs text-slate-500 font-semibold">
-          <Icons.Clock />
-          <span className="ml-1.5">Due {new Date(job.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-        </div>
+        {isCompleted ? (
+          <>
+            <div className="flex items-center text-xs text-emerald-400 font-bold">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-1.5">
+                <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span>Job Complete</span>
+            </div>
 
-        {isOver && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/10 border border-red-500/20">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
-            </span>
-            <span className="text-[9px] font-black text-red-400 uppercase tracking-wider">Over</span>
-          </div>
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${
+              budgetDifference >= 0
+                ? 'bg-emerald-500/10 border border-emerald-500/20'
+                : 'bg-red-500/10 border border-red-500/20'
+            }`}>
+              <span className={`text-[9px] font-black uppercase tracking-wider ${
+                budgetDifference >= 0 ? 'text-emerald-400' : 'text-red-400'
+              }`}>
+                {budgetDifference >= 0 ? '+' : ''}£{Math.abs(budgetDifference).toLocaleString()}
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center text-xs text-slate-500 font-semibold">
+              <Icons.Clock />
+              <span className="ml-1.5">Due {new Date(job.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+            </div>
+
+            {isOver && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/10 border border-red-500/20">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                </span>
+                <span className="text-[9px] font-black text-red-400 uppercase tracking-wider">Over</span>
+              </div>
+            )}
+          </>
         )}
       </div>
     </button>
