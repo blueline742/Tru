@@ -47,5 +47,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>TRU needs access to your photo library to attach receipt photos to job expenses for your records.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>TRU needs camera access to scan receipts and automatically extract expense items using AI.</string>
 </dict>
 </plist>
